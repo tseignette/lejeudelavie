@@ -19,9 +19,9 @@ static void compute_new_state (int y, int x)
 
     for (int i = y - 1; i <= y + 1; i++)
     for (int j = x - 1; j <= x + 1; j++)
-    n += (cur_img (i, j) != 0);
+    n += (cur_img (i, j) == 0xFFFF00FF);
 
-    if (cur_img (y, x) != 0) {
+    if (cur_img (y, x) == 0xFFFF00FF) {
       if (n == 3 || n == 4)
       n = 0xFFFF00FF;
       else
@@ -80,22 +80,78 @@ unsigned vie_compute_tile (unsigned nb_iter)
 
 ///////////////////////////// Version séquentielle optimisée (opti)
 
+int min(int a, int b) {
+  if (a < b) {
+    return a;
+  }
+  return b;
+}
+
+int max(int a, int b) {
+  if (a > b) {
+    return a;
+  }
+  return b;
+}
+
 unsigned vie_compute_opti (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
   TILEY = DIM/GRAIN;
+  //INIT
+  static int *current_array = NULL;
+  static int *next_array = NULL;
+
+  if(current_array == NULL && next_array == NULL) {
+    current_array = malloc(sizeof(int)*GRAIN*GRAIN);
+    next_array = malloc(sizeof(int)*GRAIN*GRAIN);
+
+    for (int i = 0; i < GRAIN; i++) {
+      for (int j = 0; j < GRAIN; j++) {
+        current_array[i*GRAIN+j] = 1;
+        next_array[i*GRAIN+j] = 0;
+      }
+    }
+  }
+
+  //COMPUTE
   for (unsigned it = 1; it <= nb_iter; it ++) {
     for (int x = 0; x < GRAIN; x++) {
       for (int y = 0; y < GRAIN; y++) {
-        for (int i = TILEX*x; i < TILEX*(x+1); i++) {
-          for (int j = TILEY*y; j < TILEY*(y+1); j++) {
-            compute_new_state (i, j);
+        if (current_array[x*GRAIN+y] == 1) {
+          current_array[x*GRAIN+y] = 0;
+
+          for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+            for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+              compute_new_state (i, j);
+              if (cur_img(i,j) != next_img(i,j) && (cur_img(i,j) == 0xFFFF00FF || next_img(i,j) == 0xFFFF00FF)) {
+                for (int k = max(0, x - 1); k <= min(GRAIN-1, x + 1); k++)
+                  for (int l = max(0, y - 1); l <= min(GRAIN-1, y + 1); l++)
+                    next_array[k*GRAIN+l] = 1;
+              }
+              if (next_img(i,j) != 0xFFFF00FF) {
+                next_img(i,j) = 0xFF0000FF;
+              }
+            }
+          }
+        } else {
+          for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+            for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+              if (next_img(i,j) != 0xFFFF00FF) {
+                next_img(i,j) = 0;
+              }
+            }
           }
         }
+
       }
     }
 
     swap_images ();
+
+    int *tmp = current_array;
+    current_array = next_array;
+    next_array = tmp;
   }
 
   return 0;

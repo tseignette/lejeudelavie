@@ -9,8 +9,6 @@
 #include <stdbool.h>
 
 
-///////////////////////////// Version séquentielle simple (seq)
-
 static void compute_new_state (int y, int x)
 {
   unsigned n = 0;
@@ -38,14 +36,37 @@ static void compute_new_state (int y, int x)
 }
 
 
+///////////////////////////// Version séquentielle de base
+
 // Renvoie le nombre d'itérations effectuées avant stabilisation, ou 0
-unsigned vie_compute_seq (unsigned nb_iter)
+unsigned vie_compute_base (unsigned nb_iter)
 {
   for (unsigned it = 1; it <= nb_iter; it ++) {
 
     for (int i = 0; i < DIM; i++)
     for (int j = 0; j < DIM; j++)
     compute_new_state (i, j);
+
+    swap_images ();
+  }
+
+  return 0;
+}
+
+
+///////////////////////////// Version OpenMP for de base
+
+unsigned vie_compute_base_for (unsigned nb_iter)
+{
+  for (unsigned it = 1; it <= nb_iter; it ++) {
+    #pragma omp parallel
+
+    #pragma omp for
+    for (int i = 0; i < DIM; i++) {
+      for (int j = 0; j < DIM; j++) {
+        compute_new_state (i, j);
+      }
+    }
 
     swap_images ();
   }
@@ -78,7 +99,56 @@ unsigned vie_compute_tile (unsigned nb_iter)
 }
 
 
+///////////////////////////// Version OpenMP for tuilée (tile)
+
+unsigned vie_compute_tile_for (unsigned nb_iter)
+{
+  TILEX = DIM/GRAIN;
+  TILEY = DIM/GRAIN;
+  for (unsigned it = 1; it <= nb_iter; it ++) {
+    #pragma omp parallel
+
+    #pragma omp for collapse(2)
+    for (int x = 0; x < GRAIN; x++) {
+      for (int y = 0; y < GRAIN; y++) {
+        for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+          for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+            compute_new_state (i, j);
+          }
+        }
+      }
+    }
+
+    swap_images ();
+  }
+
+  return 0;
+}
+
+
 ///////////////////////////// Version séquentielle optimisée (opti)
+
+int *current_array = NULL;
+int *next_array = NULL;
+
+void vie_init_opti() {
+  current_array = malloc(sizeof(int)*GRAIN*GRAIN);
+  next_array = malloc(sizeof(int)*GRAIN*GRAIN);
+
+  #pragma omp parallel
+
+  #pragma omp for collapse(2)
+  for (int i = 0; i < GRAIN; i++) {
+    for (int j = 0; j < GRAIN; j++) {
+      current_array[i*GRAIN+j] = 1;
+      next_array[i*GRAIN+j] = 0;
+    }
+  }
+}
+
+void vie_init_opti_for() {
+  vie_init_opti();
+}
 
 int min(int a, int b) {
   if (a < b) {
@@ -98,21 +168,6 @@ unsigned vie_compute_opti (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
   TILEY = DIM/GRAIN;
-  //INIT
-  static int *current_array = NULL;
-  static int *next_array = NULL;
-
-  if(current_array == NULL && next_array == NULL) {
-    current_array = malloc(sizeof(int)*GRAIN*GRAIN);
-    next_array = malloc(sizeof(int)*GRAIN*GRAIN);
-
-    for (int i = 0; i < GRAIN; i++) {
-      for (int j = 0; j < GRAIN; j++) {
-        current_array[i*GRAIN+j] = 1;
-        next_array[i*GRAIN+j] = 0;
-      }
-    }
-  }
 
   //COMPUTE
   for (unsigned it = 1; it <= nb_iter; it ++) {
@@ -125,24 +180,136 @@ unsigned vie_compute_opti (unsigned nb_iter)
             for (int j = TILEY*y; j < TILEY*(y+1); j++) {
               compute_new_state (i, j);
               if (cur_img(i,j) != next_img(i,j) && (cur_img(i,j) == 0xFFFF00FF || next_img(i,j) == 0xFFFF00FF)) {
-                for (int k = max(0, x - 1); k <= min(GRAIN-1, x + 1); k++)
-                  for (int l = max(0, y - 1); l <= min(GRAIN-1, y + 1); l++)
-                    next_array[k*GRAIN+l] = 1;
+                #ifdef NEIGHBOURS
+                  for (int k = max(0, x - 1); k <= min(GRAIN-1, x + 1); k++)
+                    for (int l = max(0, y - 1); l <= min(GRAIN-1, y + 1); l++)
+                      next_array[k*GRAIN+l] = 1;
+                #else
+                 next_array[x*GRAIN+y] = 1;
+                  if (i%TILEX == 0 && x > 0) {
+                    next_array[(x-1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x-1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x-1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (i%TILEX == TILEX-1 && x < GRAIN-1) {
+                    next_array[(x+1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x+1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x+1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (j%TILEY == 0 && y > 0) {
+                    next_array[x*GRAIN+(y-1)] = 1;
+                  }
+                  if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                    next_array[x*GRAIN+(y+1)] = 1;
+                  }
+                #endif
               }
-              if (next_img(i,j) != 0xFFFF00FF) {
-                next_img(i,j) = 0xFF0000FF;
-              }
-            }
-          }
-        } else {
-          for (int i = TILEX*x; i < TILEX*(x+1); i++) {
-            for (int j = TILEY*y; j < TILEY*(y+1); j++) {
-              if (next_img(i,j) != 0xFFFF00FF) {
-                next_img(i,j) = 0;
-              }
+              // if (next_img(i,j) != 0xFFFF00FF) {
+              //   next_img(i,j) = 0xFF0000FF;
+              // }
             }
           }
         }
+        // else {
+        //   for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+        //     for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+        //       if (next_img(i,j) != 0xFFFF00FF) {
+        //         next_img(i,j) = 0;
+        //       }
+        //     }
+        //   }
+        // }
+
+      }
+    }
+
+    swap_images ();
+
+    int *tmp = current_array;
+    current_array = next_array;
+    next_array = tmp;
+  }
+
+  return 0;
+}
+
+
+///////////////////////////// Version OpenMP for optimisée (opti)
+
+unsigned vie_compute_opti_for (unsigned nb_iter)
+{
+  TILEX = DIM/GRAIN;
+  TILEY = DIM/GRAIN;
+
+  //COMPUTE
+  for (unsigned it = 1; it <= nb_iter; it ++) {
+    #pragma omp parallel
+
+    #pragma omp for collapse(2)
+    for (int x = 0; x < GRAIN; x++) {
+      for (int y = 0; y < GRAIN; y++) {
+        if (current_array[x*GRAIN+y] == 1) {
+          current_array[x*GRAIN+y] = 0;
+
+          for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+            for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+              compute_new_state (i, j);
+              if (cur_img(i,j) != next_img(i,j) && (cur_img(i,j) == 0xFFFF00FF || next_img(i,j) == 0xFFFF00FF)) {
+                #ifdef NEIGHBOURS
+                  for (int k = max(0, x - 1); k <= min(GRAIN-1, x + 1); k++)
+                    for (int l = max(0, y - 1); l <= min(GRAIN-1, y + 1); l++)
+                      next_array[k*GRAIN+l] = 1;
+                #else
+                 next_array[x*GRAIN+y] = 1;
+                  if (i%TILEX == 0 && x > 0) {
+                    next_array[(x-1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x-1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x-1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (i%TILEX == TILEX-1 && x < GRAIN-1) {
+                    next_array[(x+1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x+1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x+1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (j%TILEY == 0 && y > 0) {
+                    next_array[x*GRAIN+(y-1)] = 1;
+                  }
+                  if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                    next_array[x*GRAIN+(y+1)] = 1;
+                  }
+                #endif
+              }
+              // if (next_img(i,j) != 0xFFFF00FF) {
+              //   next_img(i,j) = 0xFF0000FF;
+              // }
+            }
+          }
+        }
+        // else {
+        //   for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+        //     for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+        //       if (next_img(i,j) != 0xFFFF00FF) {
+        //         next_img(i,j) = 0;
+        //       }
+        //     }
+        //   }
+        // }
 
       }
     }

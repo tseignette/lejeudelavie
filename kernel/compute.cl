@@ -53,7 +53,27 @@ __kernel void vie (__global unsigned *in, __global unsigned *out)
   int x = get_global_id (0);
   int y = get_global_id (1);
 
-  // TODO
+  if(y > 0 && y < DIM-1 && x > 0 && x < DIM-1){
+    int n = 0;
+
+    for (int i = y - 1; i <= y + 1; i++)
+    for (int j = x - 1; j <= x + 1; j++)
+    n += (in[i*DIM+j] == 0xFFFF00FF);
+
+    if (in[y*DIM+x] == 0xFFFF00FF) {
+      if (n == 3 || n == 4)
+      n = 0xFFFF00FF;
+      else
+      n = 0;
+    } else {
+      if (n == 3)
+      n = 0xFFFF00FF;
+      else
+      n = 0;
+    }
+
+    out[y*DIM+x] = n;
+  }
 }
 
 

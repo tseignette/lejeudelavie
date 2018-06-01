@@ -134,11 +134,11 @@ unsigned vie_compute_tile_task (unsigned nb_iter)
   for (unsigned it = 1; it <= nb_iter; it ++) {
     #pragma omp parallel
 
-    #pragma omp single nowait
     for (int x = 0; x < GRAIN; x++) {
       for (int y = 0; y < GRAIN; y++) {
         for (int i = TILEX*x; i < TILEX*(x+1); i++) {
           for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+            #pragma omp single nowait
             #pragma omp task
             compute_new_state (i, j);
           }
@@ -374,9 +374,9 @@ unsigned vie_compute_opti_task (unsigned nb_iter)
   for (unsigned it = 1; it <= nb_iter; it ++) {
     #pragma omp parallel
 
-    #pragma omp single nowait
     for (int x = 0; x < GRAIN; x++) {
       for (int y = 0; y < GRAIN; y++) {
+        #pragma omp single nowait
         #pragma omp task
 
         if (current_array[x*GRAIN+y] == 1) {

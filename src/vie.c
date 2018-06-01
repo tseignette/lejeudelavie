@@ -126,6 +126,32 @@ unsigned vie_compute_tile_for (unsigned nb_iter)
   return 0;
 }
 
+// OpenMP task
+unsigned vie_compute_tile_task (unsigned nb_iter)
+{
+  TILEX = DIM/GRAIN;
+  TILEY = DIM/GRAIN;
+  for (unsigned it = 1; it <= nb_iter; it ++) {
+    #pragma omp parallel
+
+    #pragma omp single nowait
+    for (int x = 0; x < GRAIN; x++) {
+      for (int y = 0; y < GRAIN; y++) {
+        for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+          for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+            #pragma omp task
+            compute_new_state (i, j);
+          }
+        }
+      }
+    }
+
+    swap_images ();
+  }
+
+  return 0;
+}
+
 
 // =================================================================================================
 // VERSION OPTIMISÉE
@@ -150,6 +176,10 @@ void vie_init_opti() {
 }
 
 void vie_init_opti_for() {
+  vie_init_opti();
+}
+
+void vie_init_opti_task() {
   vie_init_opti();
 }
 
@@ -262,6 +292,93 @@ unsigned vie_compute_opti_for (unsigned nb_iter)
     #pragma omp for collapse(2)
     for (int x = 0; x < GRAIN; x++) {
       for (int y = 0; y < GRAIN; y++) {
+        if (current_array[x*GRAIN+y] == 1) {
+          current_array[x*GRAIN+y] = 0;
+
+          for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+            for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+              compute_new_state (i, j);
+              if (cur_img(i,j) != next_img(i,j) && (cur_img(i,j) == 0xFFFF00FF || next_img(i,j) == 0xFFFF00FF)) {
+                #ifdef NEIGHBOURS
+                  for (int k = max(0, x - 1); k <= min(GRAIN-1, x + 1); k++)
+                    for (int l = max(0, y - 1); l <= min(GRAIN-1, y + 1); l++)
+                      next_array[k*GRAIN+l] = 1;
+                #else
+                 next_array[x*GRAIN+y] = 1;
+                  if (i%TILEX == 0 && x > 0) {
+                    next_array[(x-1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x-1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x-1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (i%TILEX == TILEX-1 && x < GRAIN-1) {
+                    next_array[(x+1)*GRAIN+y] = 1;
+                    if (j%TILEY == 0 && y > 0) {
+                      next_array[(x+1)*GRAIN+(y-1)] = 1;
+                    }
+                    if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                      next_array[(x+1)*GRAIN+(y+1)] = 1;
+                    }
+                  }
+                  if (j%TILEY == 0 && y > 0) {
+                    next_array[x*GRAIN+(y-1)] = 1;
+                  }
+                  if (j%TILEY == TILEY-1 && y < GRAIN-1) {
+                    next_array[x*GRAIN+(y+1)] = 1;
+                  }
+                #endif
+              }
+              #ifdef DISPLAY_NEIGHBOURS
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0xFF0000FF;
+                }
+              #endif
+            }
+          }
+        }
+        #ifdef DISPLAY_NEIGHBOURS
+          else {
+            for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+              for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0;
+                }
+              }
+            }
+          }
+        #endif
+
+      }
+    }
+
+    swap_images ();
+
+    int *tmp = current_array;
+    current_array = next_array;
+    next_array = tmp;
+  }
+
+  return 0;
+}
+
+// OpenMP task
+unsigned vie_compute_opti_task (unsigned nb_iter)
+{
+  TILEX = DIM/GRAIN;
+  TILEY = DIM/GRAIN;
+
+  //COMPUTE
+  for (unsigned it = 1; it <= nb_iter; it ++) {
+    #pragma omp parallel
+
+    #pragma omp single nowait
+    for (int x = 0; x < GRAIN; x++) {
+      for (int y = 0; y < GRAIN; y++) {
+        #pragma omp task
+
         if (current_array[x*GRAIN+y] == 1) {
           current_array[x*GRAIN+y] = 0;
 

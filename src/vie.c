@@ -36,9 +36,11 @@ static void compute_new_state (int y, int x)
 }
 
 
-///////////////////////////// Version séquentielle de base
+// =================================================================================================
+// VERSION DE BASE
+// =================================================================================================
 
-// Renvoie le nombre d'itérations effectuées avant stabilisation, ou 0
+// Séquentielle
 unsigned vie_compute_base (unsigned nb_iter)
 {
   for (unsigned it = 1; it <= nb_iter; it ++) {
@@ -53,9 +55,7 @@ unsigned vie_compute_base (unsigned nb_iter)
   return 0;
 }
 
-
-///////////////////////////// Version OpenMP for de base
-
+// OpenMP for
 unsigned vie_compute_base_for (unsigned nb_iter)
 {
   for (unsigned it = 1; it <= nb_iter; it ++) {
@@ -75,8 +75,11 @@ unsigned vie_compute_base_for (unsigned nb_iter)
 }
 
 
-///////////////////////////// Version séquentielle tuilée (tile)
+// =================================================================================================
+// VERSION TUILÉE
+// =================================================================================================
 
+// Séquentielle
 unsigned vie_compute_tile (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
@@ -98,9 +101,7 @@ unsigned vie_compute_tile (unsigned nb_iter)
   return 0;
 }
 
-
-///////////////////////////// Version OpenMP for tuilée (tile)
-
+// OpenMP for
 unsigned vie_compute_tile_for (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
@@ -126,7 +127,9 @@ unsigned vie_compute_tile_for (unsigned nb_iter)
 }
 
 
-///////////////////////////// Version séquentielle optimisée (opti)
+// =================================================================================================
+// VERSION OPTIMISÉE
+// =================================================================================================
 
 int *current_array = NULL;
 int *next_array = NULL;
@@ -164,6 +167,7 @@ int max(int a, int b) {
   return b;
 }
 
+// Séquentielle
 unsigned vie_compute_opti (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
@@ -212,21 +216,25 @@ unsigned vie_compute_opti (unsigned nb_iter)
                   }
                 #endif
               }
-              // if (next_img(i,j) != 0xFFFF00FF) {
-              //   next_img(i,j) = 0xFF0000FF;
-              // }
+              #ifdef DISPLAY_NEIGHBOURS
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0xFF0000FF;
+                }
+              #endif
             }
           }
         }
-        // else {
-        //   for (int i = TILEX*x; i < TILEX*(x+1); i++) {
-        //     for (int j = TILEY*y; j < TILEY*(y+1); j++) {
-        //       if (next_img(i,j) != 0xFFFF00FF) {
-        //         next_img(i,j) = 0;
-        //       }
-        //     }
-        //   }
-        // }
+        #ifdef DISPLAY_NEIGHBOURS
+          else {
+            for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+              for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0;
+                }
+              }
+            }
+          }
+        #endif
 
       }
     }
@@ -241,9 +249,7 @@ unsigned vie_compute_opti (unsigned nb_iter)
   return 0;
 }
 
-
-///////////////////////////// Version OpenMP for optimisée (opti)
-
+// OpenMP for
 unsigned vie_compute_opti_for (unsigned nb_iter)
 {
   TILEX = DIM/GRAIN;
@@ -295,21 +301,25 @@ unsigned vie_compute_opti_for (unsigned nb_iter)
                   }
                 #endif
               }
-              // if (next_img(i,j) != 0xFFFF00FF) {
-              //   next_img(i,j) = 0xFF0000FF;
-              // }
+              #ifdef DISPLAY_NEIGHBOURS
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0xFF0000FF;
+                }
+              #endif
             }
           }
         }
-        // else {
-        //   for (int i = TILEX*x; i < TILEX*(x+1); i++) {
-        //     for (int j = TILEY*y; j < TILEY*(y+1); j++) {
-        //       if (next_img(i,j) != 0xFFFF00FF) {
-        //         next_img(i,j) = 0;
-        //       }
-        //     }
-        //   }
-        // }
+        #ifdef DISPLAY_NEIGHBOURS
+          else {
+            for (int i = TILEX*x; i < TILEX*(x+1); i++) {
+              for (int j = TILEY*y; j < TILEY*(y+1); j++) {
+                if (next_img(i,j) != 0xFFFF00FF) {
+                  next_img(i,j) = 0;
+                }
+              }
+            }
+          }
+        #endif
 
       }
     }
@@ -325,7 +335,9 @@ unsigned vie_compute_opti_for (unsigned nb_iter)
 }
 
 
-///////////////////////////// Configuration initiale
+// =================================================================================================
+// CONFIGURATION INITIALE
+// =================================================================================================
 
 void draw_stable (void);
 void draw_guns (void);
